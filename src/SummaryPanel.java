@@ -448,8 +448,6 @@ public class SummaryPanel extends JPanel {
             });
 
             parent.showInfoPanel();
-            searchField.setText("Search...");
-            search();
         } else {
         	Message message = new Message();
         	message.setTitle("ROW SELECTION");
@@ -588,7 +586,6 @@ public class SummaryPanel extends JPanel {
         }
         return -1; 
     }
-
 
     private void search() {
         String query = searchField.getText().trim().toLowerCase();

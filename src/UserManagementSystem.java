@@ -60,6 +60,8 @@ public class UserManagementSystem extends JFrame {
     public void showSummaryPanel() {
     	adjustFrameSize(summaryPanel);
         cardLayout.show(mainPanel, "summary");
+        summaryPanel.searchField.setText("Search...");
+        summaryPanel.searchButton.doClick();
     }
 
     private void adjustFrameSize(JPanel panel) {
