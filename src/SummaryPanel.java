@@ -19,6 +19,10 @@ public class SummaryPanel extends JPanel {
     private final String url = "jdbc:mysql://localhost:3306/company_db";
     private final String dbUsername = "root";
     private final String dbPassword = "";
+	private JButton addButton;
+	private JButton updateButton;
+	private JButton deleteButton;
+	private JButton generateButton;
     
     public SummaryPanel(UserManagementSystem parent) {
         this.parent = parent;
@@ -73,28 +77,28 @@ public class SummaryPanel extends JPanel {
 
         loadDataFromDatabase();
 
-        JButton addButton = new JButton("");
+        addButton = new JButton("");
         addButton.setBounds(159, 537, 134, 32);
         add(addButton);
         addButton.setBorderPainted(false);
         addButton.setContentAreaFilled(false);
         addButton.setOpaque(false);
 
-        JButton updateButton = new JButton("");
+        updateButton = new JButton("");
         updateButton.setBounds(325, 537, 134, 32);
         add(updateButton);
         updateButton.setOpaque(false);
         updateButton.setContentAreaFilled(false);
         updateButton.setBorderPainted(false);
 
-        JButton deleteButton = new JButton("");
+        deleteButton = new JButton("");
         deleteButton.setBounds(492, 537, 134, 32);
         add(deleteButton);
         deleteButton.setOpaque(false);
         deleteButton.setBorderPainted(false);
         deleteButton.setContentAreaFilled(false);
 
-        JButton generateButton = new JButton("");
+        generateButton = new JButton("");
         generateButton.setBounds(658, 537, 134, 32);
         add(generateButton);
         generateButton.setOpaque(false);
@@ -317,46 +321,118 @@ public class SummaryPanel extends JPanel {
 
 
     private void deleteUser() {
-        int selectedRow = summaryTable.getSelectedRow();
+        int selectedRow = summaryTable.convertRowIndexToModel(summaryTable.getSelectedRow());
         if (selectedRow >= 0) {
-            User user = parent.users.get(selectedRow);
-            deleteUserFromDatabase(user.lastName, user.firstName, user.middleName, user.email);
-            parent.users.remove(selectedRow);
-            summaryTableModel.removeRow(selectedRow);
-            
-            Message message = new Message();
-        	message.setTitle("SELECTED ENTRY");
-        	message.setMessage("Successfully deleted the selected employee.");
-        	GlassPanePopup.showPopup(message);
+            User user = retrieveOriginalIndexFromFilteredTable(selectedRow);
+            int userId = getUserIdByDetails(user.email, user.lastName, user.firstName, user.middleName);
+
+            if (userId != -1) {
+                int taskId = getTaskIdByTaskNameAndUserId(user.task, userId);
+
+                if (taskId != -1) {
+                    deleteUserTasksByUserId(userId);
+                    deleteUserFromDatabase(userId);
+
+                    parent.users.remove(selectedRow);
+                    summaryTableModel.removeRow(selectedRow);
+                    searchField.setText("Search...");
+                    search();
+
+                    Message message = new Message();
+                    message.setTitle("SELECTED ENTRY");
+                    message.setMessage("Successfully deleted the selected employee and their associated tasks.");
+                    GlassPanePopup.showPopup(message);
+                } else {
+                    Message message = new Message();
+                    message.setTitle("ERROR");
+                    message.setMessage("Task not found or does not match the user.");
+                    GlassPanePopup.showPopup(message);
+                }
+            } else {
+                Message message = new Message();
+                message.setTitle("ERROR");
+                message.setMessage("User not found.");
+                GlassPanePopup.showPopup(message);
+            }
         } else {
-        	Message message = new Message();
-        	message.setTitle("ROW SELECTION");
-        	message.setMessage("Select a row to delete.");
-        	GlassPanePopup.showPopup(message);
+            Message message = new Message();
+            message.setTitle("ROW SELECTION");
+            message.setMessage("Select a row to delete.");
+            GlassPanePopup.showPopup(message);
         }
-        loadDataFromDatabase();
     }
 
-    private void deleteUserFromDatabase(String lastName, String firstName, String middleName, String email) {
-        String sql = "DELETE FROM tbl_Employee WHERE lastName = ? AND firstName = ? AND middleName = ? AND email = ?";
+    private void deleteUserFromDatabase(int userId) {
+        String sql = "DELETE FROM tbl_Employee WHERE employeeID = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, lastName);
-            statement.setString(2, firstName);
-            statement.setString(3, middleName);
-            statement.setString(4, email);
+            statement.setInt(1, userId);
             statement.executeUpdate();
         } catch (SQLException e) {
-        	Message message = new Message();
-        	message.setTitle("ERROR");
-        	message.setMessage(e.getMessage());
-        	GlassPanePopup.showPopup(message);
+            Message message = new Message();
+            message.setTitle("ERROR");
+            message.setMessage(e.getMessage());
+            GlassPanePopup.showPopup(message);
         }
     }
+
+    private void deleteUserTasksByUserId(int userId) {
+        String sql = "DELETE FROM tbl_Task WHERE taskID = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, userId);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            Message message = new Message();
+            message.setTitle("ERROR");
+            message.setMessage(e.getMessage());
+            GlassPanePopup.showPopup(message);
+        }
+    }
+
+    private int getUserIdByDetails(String email, String lastName, String firstName, String middleName) {
+        String sql = "SELECT employeeID FROM tbl_Employee WHERE email = ? AND lastName = ? AND firstName = ? AND middleName = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, email);
+            statement.setString(2, lastName);
+            statement.setString(3, firstName);
+            statement.setString(4, middleName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return resultSet.getInt("employeeID");
+                }
+            }
+        } catch (SQLException e) {
+            Message message = new Message();
+            message.setTitle("ERROR");
+            message.setMessage(e.getMessage());
+            GlassPanePopup.showPopup(message);
+        }
+        return -1; 
+    }
+
+    private int getTaskIdByTaskNameAndUserId(String taskName, int userId) {
+        String sql = "SELECT taskID FROM tbl_Task WHERE taskName = ? AND taskID = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, taskName);
+            statement.setInt(2, userId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return resultSet.getInt("taskID");
+                }
+            }
+        } catch (SQLException e) {
+            Message message = new Message();
+            message.setTitle("ERROR");
+            message.setMessage(e.getMessage());
+            GlassPanePopup.showPopup(message);
+        }
+        return -1;
+    }
+
     
     private void updateUser() {
-        int selectedRow = summaryTable.getSelectedRow();
+    	int selectedRow = summaryTable.convertRowIndexToModel(summaryTable.getSelectedRow());
         if (selectedRow >= 0) {
-            User user = parent.users.get(selectedRow);
+        	User user = retrieveOriginalIndexFromFilteredTable(selectedRow);
             parent.infoPanel.setUserToFields(user);
 
             for (ActionListener al : parent.infoPanel.submitButton.getActionListeners()) {
@@ -372,7 +448,8 @@ public class SummaryPanel extends JPanel {
             });
 
             parent.showInfoPanel();
-            loadDataFromDatabase();
+            searchField.setText("Search...");
+            search();
         } else {
         	Message message = new Message();
         	message.setTitle("ROW SELECTION");
@@ -517,6 +594,7 @@ public class SummaryPanel extends JPanel {
         String query = searchField.getText().trim().toLowerCase();
 
         if (!query.isEmpty() && !query.equalsIgnoreCase("search...")) {
+        	
             DefaultTableModel filteredModel = new DefaultTableModel(new String[]{"Last Name", "First Name", "Middle Name", "Age", "Address", "Email", "Department", "Project", "Task"}, 0) {
                 @Override
                 public boolean isCellEditable(int row, int column) {
@@ -560,7 +638,6 @@ public class SummaryPanel extends JPanel {
                 GlassPanePopup.showPopup(message);
                 return;
             }
-
             summaryTable.setModel(filteredModel);
 
         } else {
